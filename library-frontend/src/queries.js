@@ -51,3 +51,50 @@ export const EDIT_AUTHOR = gql`
       }
    }
 `;
+
+export const LOGIN = gql`
+   mutation login($username: String!, $password: String!) {
+      login(username: $username, password: $password) {
+         value
+      }
+   }
+`;
+
+export const BOOK_DETAILS = gql`
+   fragment BookDetails on Book {
+      id
+      title
+      author {
+         name
+         born
+         bookCount
+      }
+      published
+      genres
+   }
+`;
+
+export const BOOK_ADDED = gql`
+   subscription {
+      bookAdded {
+         ...BookDetails
+      }
+   }
+
+   ${BOOK_DETAILS}
+`;
+
+export const FILTERED_BOOKS = gql`
+   query allBooks($genre: [String!]) {
+      allBooks(genre: $genre) {
+         title
+         author {
+            name
+            born
+            bookCount
+         }
+         published
+         genres
+      }
+   }
+`;

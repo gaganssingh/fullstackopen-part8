@@ -1,46 +1,41 @@
 import React, { useState } from "react";
-import { useMutation } from "@apollo/client";
-import { ALL_AUTHORS, ALL_BOOKS, ADD_BOOK } from "../queries";
 
 const NewBook = (props) => {
    const [title, setTitle] = useState("");
-   const [author, setAuhtor] = useState("");
-   const [published, setPublished] = useState("");
+   const [author, setAuthor] = useState("");
+   const [publishedStr, setPublishedStr] = useState("");
    const [genre, setGenre] = useState("");
    const [genres, setGenres] = useState([]);
-
-   const [addBook] = useMutation(ADD_BOOK, {
-      refetchQueries: [{ query: ALL_AUTHORS }, { query: ALL_BOOKS }],
-   });
 
    if (!props.show) {
       return null;
    }
 
-   const submit = (event) => {
-      event.preventDefault();
+   const submit = async (e) => {
+      e.preventDefault();
+      await props.addBook({
+         variables: {
+            title,
+            author,
+            genres,
+            published: publishedStr === "" ? NaN : parseInt(publishedStr),
+         },
+      });
 
       console.log("add book...");
 
-      let datePub = -1;
-      if (published === "") {
-         datePub = NaN;
-      } else {
-         datePub = parseInt(published);
-      }
-
-      addBook({ variables: { title, author, published: datePub, genres } });
-
       setTitle("");
-      setPublished("");
-      setAuhtor("");
+      setPublishedStr("");
+      setAuthor("");
       setGenres([]);
       setGenre("");
    };
 
    const addGenre = () => {
-      setGenres(genres.concat(genre));
-      setGenre("");
+      if (genre !== "") {
+         setGenres(genres.concat(genre));
+         setGenre("");
+      }
    };
 
    return (
@@ -57,15 +52,15 @@ const NewBook = (props) => {
                author
                <input
                   value={author}
-                  onChange={({ target }) => setAuhtor(target.value)}
+                  onChange={({ target }) => setAuthor(target.value)}
                />
             </div>
             <div>
                published
                <input
                   type="number"
-                  value={published}
-                  onChange={({ target }) => setPublished(target.value)}
+                  value={publishedStr}
+                  onChange={({ target }) => setPublishedStr(target.value)}
                />
             </div>
             <div>

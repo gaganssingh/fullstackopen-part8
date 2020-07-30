@@ -1,4 +1,4 @@
-const { ApolloServer, gql } = require("apollo-server");
+const { ApolloServer, gql, PubSub } = require("apollo-server");
 const mongoose = require("mongoose");
 const Author = require("./models/author");
 const Book = require("./models/book");
@@ -20,6 +20,8 @@ mongoose
    .catch((error) => {
       console.log("error connection to MongoDB:", error.message);
    });
+
+const pubSub = new PubSub();
 
 let authors = [
    {
@@ -144,6 +146,10 @@ const typeDefs = gql`
       createUser(username: String!, favoriteGenre: String!): User
       login(username: String!, password: String!): Token
    }
+   type Subscription {
+      bookAdded: Book!
+      authorAdded: Author!
+   }
 `;
 
 const getAuthorId = async (name) => {
@@ -176,7 +182,7 @@ const resolvers = {
             const allBooks = await Book.find({});
             return authorDetails(allBooks);
          } else if (!args.author && args.genre) {
-            const allBooks = await Book.find({ genres: { $in: [args.genre] } });
+            const allBooks = await Book.find({ genres: { $in: args.genre } });
             return authorDetails(allBooks);
          } else if (args.author && !args.genre) {
             const authorId = await getAuthorId(args.author);
@@ -186,38 +192,21 @@ const resolvers = {
             const authorId = await getAuthorId(args.author);
             const allBooks = await Book.find({
                author: { $in: [authorId] },
-               genres: { $in: [args.genre] },
+               genres: { $in: args.genre },
             });
             return authorDetails(allBooks);
          }
          return [];
       },
       allAuthors: (root, args) => {
-         return Author.find({});
+         return Author.find({}).populate("books");
       },
       me: (root, args, context) => {
          return context.currentUser;
       },
    },
    Author: {
-      bookCount: async (root) => {
-         let authorId = null;
-         const existingAuthor = await Author.findOne({ name: root.name });
-         if (existingAuthor !== null && existingAuthor._id !== null) {
-            authorId = existingAuthor._id;
-         }
-
-         if (authorId === null) {
-            return 0;
-         }
-
-         const booksWritten = await Book.find({ author: authorId });
-         let booksWrittenLength = 0;
-         if (booksWritten !== null && booksWritten.length) {
-            booksWrittenLength = booksWritten.length;
-         }
-         return booksWrittenLength;
-      },
+      bookCount: async (root) => root.books.length,
    },
    Mutation: {
       addBook: async (root, args, { currentUser }) => {
@@ -232,11 +221,12 @@ const resolvers = {
          if (existingAuthor !== null && existingAuthor._id !== null) {
             authorId = existingAuthor._id;
          }
-
          if (authorId === null) {
             try {
                bookAuthor = new Author({ name: args.author });
                await bookAuthor.save();
+
+               pubSub.publish("AUTHOR_ADDED", { authorAdded: bookAuthor });
             } catch (error) {
                throw new UserInputError(error.message, {
                   invalid: args,
@@ -253,12 +243,13 @@ const resolvers = {
 
          try {
             await book.save();
+            await bookAuthor.updateOne({ $push: { books: book } });
          } catch (error) {
             throw new UserInputError(error.message, {
                invalid: args,
             });
          }
-
+         pubSub.publish("BOOK_ADDED", { bookAdded: book });
          return book;
       },
       editAuthor: async (root, args, { currentUser }) => {
@@ -288,13 +279,19 @@ const resolvers = {
          if (!user || args.password !== "secret") {
             throw new UserInputError("Incorrect credentials");
          }
-
          const userForToken = {
             username: user.username,
             id: user._id,
          };
-
          return { value: jwt.sign(userForToken, JWT_SECRET) };
+      },
+   },
+   Subscription: {
+      bookAdded: {
+         subscribe: () => pubSub.asyncIterator(["BOOK_ADDED"]),
+      },
+      authorAdded: {
+         subscribe: () => pubSub.asyncIterator(["AUTHOR_ADDED"]),
       },
    },
 };
@@ -302,6 +299,17 @@ const resolvers = {
 const server = new ApolloServer({
    typeDefs,
    resolvers,
+   context: async ({ req }) => {
+      const auth = req ? req.headers.authorization : null;
+      if (auth && auth.toLowerCase().startsWith("bearer")) {
+         const decodedToken = jwt.verify(auth.substring(7), JWT_SECRET);
+         const currentUser = await User.findById(decodedToken.id);
+         return { currentUser };
+      }
+   },
 });
 
-server.listen().then(({ url }) => console.log(`Server ready at ${url}`));
+server.listen().then(({ url, subscriptionsUrl }) => {
+   console.log(`Server ready at ${url}`);
+   console.log(`Subscriptions ready at ${subscriptionsUrl}`);
+});

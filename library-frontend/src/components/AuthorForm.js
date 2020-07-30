@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import Select from "react-select";
 
-const UpdateBirthYear = (props) => {
+const AuthorForm = (props) => {
    const [name, setName] = useState("");
-   const [year, setYear] = useState("");
+   const [bornStr, setBornStr] = useState("");
    const [selectedOption, setSelectedOption] = useState("");
 
    if (props.authors.loading) {
@@ -15,18 +15,20 @@ const UpdateBirthYear = (props) => {
       return { value: author.name, label: author.name };
    });
 
-   const handleOptionSelection = (selectedOption) => {
+   const handleSelect = (selectedOption) => {
       setSelectedOption(selectedOption);
       setName(selectedOption.value);
    };
 
    const submit = async (event) => {
       event.preventDefault();
-      const born = parseInt(year);
+
+      const born = parseInt(bornStr);
+
       await props.editAuthor({ variables: { name, born } });
       setSelectedOption("");
       setName("");
-      setYear("");
+      setBornStr("");
    };
 
    if (!props.show) {
@@ -35,24 +37,24 @@ const UpdateBirthYear = (props) => {
 
    return (
       <div>
-         <h2>Set birthyear</h2>
+         <h2>Edit Author Birthyear</h2>
          <form onSubmit={submit}>
             <Select
                value={selectedOption}
-               onChange={handleOptionSelection}
+               onChange={handleSelect}
                options={options}
             />
             <div>
                born
                <input
-                  value={year}
-                  onChange={({ target }) => setYear(target.value)}
+                  value={bornStr}
+                  onChange={({ target }) => setBornStr(target.value)}
                />
             </div>
-            <button type="submit">update author</button>
+            <button type="submit">Edit Birthday</button>
          </form>
       </div>
    );
 };
 
-export default UpdateBirthYear;
+export default AuthorForm;
